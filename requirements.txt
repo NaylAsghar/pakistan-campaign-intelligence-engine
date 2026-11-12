@@ -1,0 +1,9 @@
+google-api-python-client
+python-dotenv
+pandas
+scipy
+scikit-learn
+vaderSentiment
+matplotlib
+plotly
+streamlit
