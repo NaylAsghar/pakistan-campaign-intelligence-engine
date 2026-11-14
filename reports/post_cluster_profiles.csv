@@ -1,0 +1,5 @@
+cluster,name,posts,share_pct,median_views_per_day,median_like_rate,mean_comments,median_days_old,pct_short,top_brand,top_campaign
+0,"low reach, high like rate",236,12.0,0.6,1.3,2.56,1687,82.6,Sapphire,General Lawn Collection
+1,"high reach, low like rate",670,34.2,67.3,0.03,0.49,1337,96.3,Sapphire,General Lawn Collection
+2,"high reach, low like rate, talked-about",115,5.9,197.7,0.13,40.56,1734,57.4,Alkaram,General Lawn Collection
+3,"low reach, high like rate",938,47.9,0.6,1.24,0.12,1190,95.7,Sapphire,Eid Collection
