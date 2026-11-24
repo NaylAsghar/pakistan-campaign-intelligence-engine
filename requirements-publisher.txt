@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+sqlalchemy
+bcrypt
+itsdangerous
+boto3
+cryptography
+google-auth
+google-auth-oauthlib
+google-api-python-client
+python-dotenv
+apscheduler
+pandas
+pytest
+httpx

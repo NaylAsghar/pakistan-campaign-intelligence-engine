@@ -1,0 +1,44 @@
+---
+description: Project rules for the Product Video Scheduler (Project 4), built on top of the Project 3 repo
+alwaysApply: true
+---
+
+# Context
+This repo already contains Project 3 (Pakistan Campaign Intelligence Engine):
+- `app/app.py`  Streamlit insights app (DO NOT break it; it is deployed on Streamlit Cloud from `main`)
+- `src/`        data pipeline scripts (build_posts, collect_comments, label_comments, cluster_*)
+- `data/processed/` posts.csv, posts_clustered.csv, comments.csv, comment_clusters.csv
+- `reports/`, `images/`
+
+Project 4 adds a NEW package `publisher/` (FastAPI) that automates product-video scheduling and
+YouTube publishing. The brief is in `docs/BRIEF.md`. The task list is in `docs/PHASES.md`.
+
+# Stack (do not change without asking)
+- Python 3.11+, FastAPI, Jinja2 templates, SQLAlchemy 2.x
+- DB: SQLite locally, Postgres (Neon/Supabase) in production, chosen by `DATABASE_URL`
+- Storage: Cloudflare R2 through boto3 (S3 compatible), presigned URLs
+- YouTube: google-auth, google-auth-oauthlib, google-api-python-client (YouTube Data API v3, Google OAuth 2.0)
+- Tokens encrypted with cryptography Fernet
+- Tests: pytest
+- Dependencies for the publisher go in `requirements-publisher.txt`.
+  NEVER add them to the root `requirements.txt` (Streamlit Cloud installs that file).
+
+# Layout
+publisher/
+  main.py  config.py  db.py  models.py  security.py
+  routes/    auth.py products.py videos.py youtube.py schedules.py dashboard.py internal.py
+  services/  r2.py youtube_client.py publisher.py insights.py
+  templates/  static/
+tests/publisher/
+
+# Hard rules
+1. No secrets in code. Read everything from environment variables via `publisher/config.py`. Keep `.env.example` updated.
+2. Store all datetimes in UTC. Convert to/from Asia/Karachi only in the UI layer.
+3. Refresh tokens are always encrypted before saving. Never log tokens or secrets.
+4. The scheduler must claim a job atomically (UPDATE ... WHERE status='scheduled') so a video is never published twice.
+5. Never load a whole video into memory; stream it from R2 and use a resumable YouTube upload.
+6. Every route checks that the object belongs to the logged-in user.
+7. Every feature gets at least one pytest test. Mock R2 and YouTube in tests.
+8. Work only on the phase I name. Do not refactor unrelated files. Do not touch `app/`, `src/` or `data/` unless I say so.
+9. Keep code simple and commented enough for a student to explain in a viva.
+10. Statuses: draft -> scheduled -> processing -> published | failed.
