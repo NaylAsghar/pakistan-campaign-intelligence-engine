@@ -16,7 +16,7 @@ YouTube publishing. The brief is in `docs/BRIEF.md`. The task list is in `docs/P
 # Stack (do not change without asking)
 - Python 3.11+, FastAPI, Jinja2 templates, SQLAlchemy 2.x
 - DB: SQLite locally, Postgres (Neon/Supabase) in production, chosen by `DATABASE_URL`
-- Storage: Cloudflare R2 through boto3 (S3 compatible), presigned URLs
+- Storage: all file access goes through `publisher/services/storage.py` with two backends chosen by `STORAGE_BACKEND`: `local` (files in `LOCAL_STORAGE_DIR`, default `./storage`) and `s3` (boto3 with `S3_ENDPOINT_URL`, so Cloudflare R2 or any S3-compatible service works). The rest of the app never touches file paths or boto3 directly.
 - YouTube: google-auth, google-auth-oauthlib, google-api-python-client (YouTube Data API v3, Google OAuth 2.0)
 - Tokens encrypted with cryptography Fernet
 - Tests: pytest
@@ -27,7 +27,7 @@ YouTube publishing. The brief is in `docs/BRIEF.md`. The task list is in `docs/P
 publisher/
   main.py  config.py  db.py  models.py  security.py
   routes/    auth.py products.py videos.py youtube.py schedules.py dashboard.py internal.py
-  services/  r2.py youtube_client.py publisher.py insights.py
+  services/  storage.py youtube_client.py publisher.py insights.py
   templates/  static/
 tests/publisher/
 
