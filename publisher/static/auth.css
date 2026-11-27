@@ -1,0 +1,7 @@
+.auth-form { display: grid; gap: 1rem; max-width: 22rem; }
+.auth-form label { display: grid; gap: 0.25rem; }
+.auth-form input { padding: 0.5rem; font: inherit; }
+.form-error { color: #b00020; background: #fdecea; padding: 0.5rem 0.75rem; max-width: 22rem; }
+nav { display: flex; gap: 1rem; align-items: center; }
+.nav-user { margin-left: auto; }
+.nav-form { margin: 0; }

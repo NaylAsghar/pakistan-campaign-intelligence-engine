@@ -8,17 +8,18 @@ From the repo root, with SECRET_KEY and FERNET_KEY set:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
+from publisher import auth
+from publisher.config import get_settings
 from publisher.db import init_db
+from publisher.templating import PACKAGE_DIR, templates
 
-# This file lives in publisher/, next to templates/ and static/.
-PACKAGE_DIR = Path(__file__).resolve().parent
+SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60  # stay logged in for 14 days
 
 
 @asynccontextmanager
@@ -28,14 +29,26 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+settings = get_settings()
+
 app = FastAPI(title="Product Video Scheduler", lifespan=lifespan)
+
+# Signed (not encrypted) cookie: the user can read it but cannot change it.
+# SameSite=lax stops other sites from making the browser send it on POSTs.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    max_age=SESSION_MAX_AGE_SECONDS,
+    same_site="lax",
+    https_only=settings.SESSION_COOKIE_SECURE,
+)
 
 app.mount(
     "/static",
     StaticFiles(directory=str(PACKAGE_DIR / "static")),
     name="static",
 )
-templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
+app.include_router(auth.router)
 
 
 @app.get("/health")

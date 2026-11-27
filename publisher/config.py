@@ -58,6 +58,9 @@ class Settings:
     S3_REGION: str
     CRON_TOKEN: str
     APP_TIMEZONE: str
+    # True only behind HTTPS. Local http://localhost must leave this false
+    # or the browser will not send the session cookie.
+    SESSION_COOKIE_SECURE: bool
 
 
 @lru_cache(maxsize=1)
@@ -86,4 +89,6 @@ def get_settings() -> Settings:
         S3_REGION=_read("S3_REGION", ""),
         CRON_TOKEN=_read("CRON_TOKEN", ""),
         APP_TIMEZONE=_read("APP_TIMEZONE", "Asia/Karachi"),
+        SESSION_COOKIE_SECURE=_read("SESSION_COOKIE_SECURE", "false").lower()
+        in ("1", "true", "yes"),
     )
