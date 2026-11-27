@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}YouTube - Product Video Scheduler{% endblock %}
+{% block content %}
+<h1>YouTube channels</h1>
+
+{% if message %}
+  <p class="{{ 'form-error' if message.kind == 'error' else 'form-ok' }}" role="alert">{{ message.text }}</p>
+{% endif %}
+
+{% if accounts %}
+<ul class="channel-list">
+  {% for a in accounts %}
+  <li>
+    <div>
+      <strong>{{ a.channel_title or "(untitled channel)" }}</strong><br>
+      <a class="muted" href="https://www.youtube.com/channel/{{ a.channel_id }}" target="_blank" rel="noopener">{{ a.channel_id }}</a>
+      <span class="muted"> &middot; connected {{ a.connected_at.strftime("%Y-%m-%d %H:%M") }} UTC</span>
+    </div>
+    <form method="post" action="/youtube/{{ a.id }}/disconnect" class="inline-form"
+          onsubmit="return confirm('Disconnect this channel?');">
+      <button type="submit" class="danger">Disconnect</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No YouTube channel connected yet. Connect one so the app can publish your videos.</p>
+{% endif %}
+
+{% if configured %}
+<form method="post" action="/youtube/connect">
+  <button type="submit" class="button">{{ "Connect another channel" if accounts else "Connect YouTube" }}</button>
+</form>
+<p class="muted">You will be sent to Google to approve access. The app can upload videos and read
+your channel details; it never sees your Google password.</p>
+{% else %}
+<p class="form-error">Google credentials are not configured on the server (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).</p>
+{% endif %}
+{% endblock %}

@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from publisher import auth, products
+from publisher import auth, products, youtube
 from publisher.config import get_settings
 from publisher.db import init_db
 from publisher.templating import PACKAGE_DIR, templates
@@ -50,6 +50,7 @@ app.mount(
 )
 app.include_router(auth.router)
 app.include_router(products.router)
+app.include_router(youtube.router)
 
 
 @app.get("/health")
