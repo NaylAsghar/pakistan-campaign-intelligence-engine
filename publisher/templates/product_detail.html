@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} - Product Video Scheduler{% endblock %}
+{% block content %}
+<p><a href="/products">&larr; All products</a></p>
+<div class="page-head">
+  <h1>{{ product.name }}</h1>
+  <span>
+    <a class="button" href="/products/{{ product.id }}/edit">Edit</a>
+    <form method="post" action="/products/{{ product.id }}/delete" class="inline-form"
+          onsubmit="return confirm('Delete this product and all its images?');">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+  </span>
+</div>
+{% if product.description %}<p class="description">{{ product.description }}</p>{% endif %}
+
+<h2>Images ({{ images | length }}/{{ max_images }})</h2>
+{% if images %}
+<ul class="image-grid">
+  {% for img in images %}
+  <li>
+    <img src="/images/{{ img.id }}" alt="{{ product.name }} - {{ img.angle_label }}" loading="lazy">
+    <span class="muted">{{ img.angle_label }}</span>
+    <form method="post" action="/products/{{ product.id }}/images/{{ img.id }}/delete"
+          onsubmit="return confirm('Delete this image?');">
+      <button type="submit" class="danger small">Delete</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No images yet.</p>
+{% endif %}
+
+{% if images | length < max_images %}
+<h2>Add images</h2>
+<form id="upload-form" data-product-id="{{ product.id }}" data-angles='{{ angles | tojson }}'
+      data-max-images="{{ max_images - (images | length) }}" data-max-mb="{{ max_mb }}">
+  <p class="muted">JPEG, PNG or WebP, up to {{ max_mb }} MB each. Pick the angle for every photo.</p>
+  <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" multiple>
+  <div id="upload-list"></div>
+  <p id="upload-message" class="form-error" role="alert" hidden></p>
+  <button type="submit" id="upload-button" disabled>Upload</button>
+</form>
+<script src="/static/product_images.js"></script>
+{% endif %}
+{% endblock %}

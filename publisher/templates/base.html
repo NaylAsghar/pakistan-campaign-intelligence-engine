@@ -6,11 +6,13 @@
   <title>{% block title %}Product Video Scheduler{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/auth.css">
+  <link rel="stylesheet" href="/static/products.css">
 </head>
 <body>
   <nav>
     <a href="/">Product Video Scheduler</a>
     {% if request.session.get("user_id") %}
+      <a href="/products">Products</a>
       <span class="nav-user">{{ request.session.get("email") }}</span>
       <form method="post" action="/logout" class="nav-form">
         <button type="submit">Log out</button>
