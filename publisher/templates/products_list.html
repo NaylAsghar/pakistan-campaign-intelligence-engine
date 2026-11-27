@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}My products - Product Video Scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>My products</h1>
+  <a class="button" href="/products/new">+ New product</a>
+</div>
+{% if products %}
+<ul class="product-grid">
+  {% for p in products %}
+  <li class="product-card">
+    <a href="/products/{{ p.id }}">
+      {% if p.images %}
+        <img src="/images/{{ (p.images | sort(attribute='id'))[0].id }}" alt="{{ p.name }}" loading="lazy">
+      {% else %}
+        <div class="no-image">No images yet</div>
+      {% endif %}
+      <strong>{{ p.name }}</strong>
+      <span class="muted">{{ p.images | length }} image{{ "" if p.images | length == 1 else "s" }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>You have no products yet. <a href="/products/new">Add your first product.</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit product" if product else "New product" }} - Product Video Scheduler{% endblock %}
+{% block content %}
+<h1>{{ "Edit product" if product else "New product" }}</h1>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="{{ '/products/%d/edit' % product.id if product else '/products' }}" class="auth-form wide">
+  <label>Product name
+    <input type="text" name="name" value="{{ name }}" required maxlength="255" autofocus>
+  </label>
+  <label>Description
+    <textarea name="description" rows="6" maxlength="5000">{{ description }}</textarea>
+  </label>
+  <button type="submit">{{ "Save changes" if product else "Create product" }}</button>
+</form>
+<p><a href="{{ '/products/%d' % product.id if product else '/products' }}">Cancel</a></p>
+{% endblock %}
