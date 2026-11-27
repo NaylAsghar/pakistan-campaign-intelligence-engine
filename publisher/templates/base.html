@@ -7,12 +7,14 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/auth.css">
   <link rel="stylesheet" href="/static/products.css">
+  <link rel="stylesheet" href="/static/youtube.css">
 </head>
 <body>
   <nav>
     <a href="/">Product Video Scheduler</a>
     {% if request.session.get("user_id") %}
       <a href="/products">Products</a>
+      <a href="/youtube">YouTube</a>
       <span class="nav-user">{{ request.session.get("email") }}</span>
       <form method="post" action="/logout" class="nav-form">
         <button type="submit">Log out</button>
