@@ -1,0 +1,12 @@
+.tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.tabs a { padding: 0.25rem 0.75rem; border: 1px solid #ccc; border-radius: 999px; text-decoration: none; color: inherit; font-size: 0.9rem; }
+.tabs a.active { background: #222; color: #fff; border-color: #222; }
+.schedule-table { border-collapse: collapse; width: 100%; max-width: 60rem; }
+.schedule-table th, .schedule-table td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+.schedule-table .actions { white-space: nowrap; }
+.badge-scheduled { background: #e6f0ff; color: #0b4fa8; }
+.badge-processing { background: #fff4d6; color: #7a5a00; }
+.badge-published { background: #e8f5ec; color: #1b6e32; }
+.badge-failed { background: #fdecea; color: #b00020; }
+.badge-draft { background: #eceff3; color: #444; }
+@media (max-width: 40rem) { .schedule-table { display: block; overflow-x: auto; } }

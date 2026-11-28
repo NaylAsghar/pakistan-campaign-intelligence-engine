@@ -54,7 +54,8 @@ ANGLE_LABELS = (
 
 
 def _page(request: Request, template: str, status_code: int = 200, **context):
-    # The parameter is `template`, not `name`: a page may pass its own `name` value.
+    # The parameter is `template`, not `name`: pages pass a product `name=...`
+    # in **context, and two arguments called `name` raised a TypeError (500).
     return templates.TemplateResponse(
         request=request, name=template, context=context, status_code=status_code
     )

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Project 3 Campaign Insights - Product Video Scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Project 3 Audience &amp; Campaign Intelligence</h1>
+  <a class="button" href="/schedules/new">+ Schedule with Insights</a>
+</div>
+
+<p class="muted">
+  Powered by findings from <strong>Project 3 (Pakistan Social Audience &amp; Campaign Intelligence Engine)</strong>
+  across 1,959 YouTube posts and 3,873 comments from Pakistani lawn brands.
+</p>
+
+<h2>1. Best Posting Windows (Asia/Karachi)</h2>
+<div class="kpi-grid">
+  {% for slot in slots %}
+  <div class="kpi-card">
+    <strong>{{ slot.label }}</strong>
+    <p class="muted">{{ slot.reason }}</p>
+    <p>Next slot: <code>{{ slot.display }}</code></p>
+    <a class="button small" href="/schedules/new?when={{ slot.input_value }}">Schedule in this slot</a>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>2. Data-Backed Title &amp; Description Helper</h2>
+<form id="copy-helper-form" class="auth-form wide">
+  <label>Product Name
+    <input type="text" name="product_name" id="helper-product-name"
+           value="{{ products[0].name if products else '3-Piece Embroidered Lawn Suit' }}" required>
+  </label>
+  <label>Product Notes / Fabric Details
+    <textarea name="product_description" id="helper-product-desc" rows="3">{{ products[0].description if products else '' }}</textarea>
+  </label>
+  <label>Campaign Theme (Spring Lawn had highest median like rate: 1.09, p &lt; 0.0001)
+    <input type="text" name="campaign" value="Spring Lawn">
+  </label>
+  <label>Featured Celebrity / Model (10% of comments mention celebrities)
+    <input type="text" name="celebrity" placeholder="e.g. Yumna Zaidi, Ayeza Khan">
+  </label>
+  <label>Song / Singer Credit (34.4% of comments ask about the soundtrack)
+    <input type="text" name="song_credit" placeholder="e.g. Bahara OST - Full Audio">
+  </label>
+  <label>Starting Price in PKR (answers the #1 shopping question: 'price?')
+    <input type="text" name="price_pkr" placeholder="e.g. 6,950">
+  </label>
+  <label>Store / Online Product URL
+    <input type="text" name="availability_url" placeholder="https://yourbrand.pk/products/lawn-01">
+  </label>
+  <label>A/B Variant Mode
+    <select name="variant">
+      <option value="A">Variant A (Include Price &amp; Full Details)</option>
+      <option value="B">Variant B (Omit Price - Curiosity Hook)</option>
+    </select>
+  </label>
+  <button type="submit">Generate YouTube Title, Description &amp; Tags</button>
+</form>
+
+<div id="helper-output" class="insight-box" {% if not generated %}hidden{% endif %}>
+  <h3>Generated Metadata (Copy into your Video Edit page)</h3>
+  <p><strong>Title:</strong> <span id="out-title">{{ generated.title if generated else '' }}</span></p>
+  <p><strong>Tags:</strong> <span id="out-tags">{{ generated.tags if generated else '' }}</span></p>
+  <label><strong>Description:</strong>
+    <textarea id="out-desc" rows="7" readonly>{{ generated.description if generated else '' }}</textarea>
+  </label>
+</div>
+
+<h2>3. Recommended A/B Tests (Project 3 Section 5.5)</h2>
+<table class="schedule-table">
+  <thead>
+    <tr><th>Test</th><th>Variant A</th><th>Variant B</th><th>Evidence &amp; Goal</th><th>Quick Schedule</th></tr>
+  </thead>
+  <tbody>
+    {% for t in ab_tests %}
+    <tr>
+      <td><strong>{{ t.name }}</strong></td>
+      <td>{{ t.variant_a }}</td>
+      <td>{{ t.variant_b }}</td>
+      <td class="muted">{{ t.hypothesis }}</td>
+      <td class="actions">
+        <a class="button small" href="/schedules/new?variant={{ t.variant_a | urlencode }}">Run A</a>
+        <a class="button small" href="/schedules/new?variant={{ t.variant_b | urlencode }}">Run B</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>4. Evidence Table from Project 3</h2>
+<table class="schedule-table">
+  <thead>
+    <tr><th>Area</th><th>Priority</th><th>Recommendation</th><th>Project 3 Evidence</th></tr>
+  </thead>
+  <tbody>
+    {% for f in findings %}
+    <tr>
+      <td>{{ f.area }}</td>
+      <td><span class="badge">{{ f.priority }}</span></td>
+      <td><strong>{{ f.headline }}</strong><br><span class="muted">{{ f.action }}</span></td>
+      <td class="muted">{{ f.evidence }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+document.getElementById("copy-helper-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const res = await fetch("/insights/generate", { method: "POST", body: formData });
+  if (!res.ok) return;
+  const data = await res.json();
+  document.getElementById("out-title").textContent = data.title;
+  document.getElementById("out-tags").textContent = data.tags;
+  document.getElementById("out-desc").value = data.description;
+  document.getElementById("helper-output").hidden = false;
+});
+</script>
+{% endblock %}

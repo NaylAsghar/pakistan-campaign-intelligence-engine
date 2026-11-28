@@ -1,0 +1,457 @@
+"""Background publisher worker (Phase 7) and YouTube stats sync (Phase 10).
+
+Runs either via CLI (`python -m publisher.worker`) or via the HTTP cron
+endpoint (`POST /cron/run` or `POST /cron/publish` protected by `CRON_TOKEN`).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import httpx
+from sqlalchemy import or_, select, update
+from sqlalchemy.orm import Session
+
+from publisher.db import SessionLocal
+from publisher.google_oauth import YouTubeError, access_token_for
+from publisher.models import (
+STATUS_FAILED,
+STATUS_PROCESSING,
+STATUS_PUBLISHED,
+STATUS_SCHEDULED,
+Schedule,
+Video,
+VideoStat,
+YouTubeAccount,
+utcnow,
+)
+from publisher.storage import content_type_for_key, get_storage
+
+YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+YOUTUBE_THUMBNAIL_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
+YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_MINUTES = (5, 15, 45)
+STALE_PROCESSING_MINUTES = 30
+UPLOAD_TIMEOUT_SECONDS = 300
+
+
+@dataclass
+class RunSummary:
+    """Summary returned by a single worker pass."""
+
+claimed: int = 0
+recovered: int = 0
+processed: int = 0
+published: int = 0
+retried: int = 0
+failed: int = 0
+
+
+class PermanentPublishError(Exception):
+    """Non-retriable failure (revoked token, invalid metadata, missing file)."""
+
+
+class TransientPublishError(Exception):
+    """Temporary failure (network timeout, YouTube 5xx / 429 rate limit)."""
+
+
+def _initiate_resumable_upload(
+access_token: str,
+video: Video,
+file_size: int,
+mime_type: str,
+) -> str:
+    """Start a YouTube resumable upload session and return the Location URI."""
+tags = [t.strip() for t in (video.tags or "").split(",") if t.strip()]
+metadata = {
+    "snippet": {
+        "title": video.title[:100],
+        "description": video.description or "",
+        "tags": tags,
+        "categoryId": "22",
+    },
+    "status": {
+        "privacyStatus": video.privacy_status or "private",
+        "selfDeclaredMadeForKids": False,
+    },
+}
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Content-Type": "application/json; charset=UTF-8",
+    "X-Upload-Content-Length": str(file_size),
+    "X-Upload-Content-Type": mime_type or "video/mp4",
+}
+params = {"uploadType": "resumable", "part": "snippet,status"}
+try:
+    resp = httpx.post(
+        YOUTUBE_UPLOAD_URL,
+        params=params,
+        headers=headers,
+        content=json.dumps(metadata).encode("utf-8"),
+        timeout=30,
+    )
+except httpx.HTTPError as exc:
+    raise TransientPublishError(f"Network error starting upload: {exc}") from exc
+
+if resp.status_code in (401, 403):
+    raise PermanentPublishError(
+        "YouTube rejected authorization (401/403). Reconnect your channel."
+    )
+if resp.status_code == 400:
+    raise PermanentPublishError(f"YouTube rejected video metadata: {resp.text[:200]}")
+if resp.status_code >= 500 or resp.status_code == 429:
+    raise TransientPublishError(f"YouTube temporary error ({resp.status_code}).")
+if resp.status_code >= 400:
+    raise PermanentPublishError(f"YouTube upload init failed ({resp.status_code}).")
+
+upload_uri = resp.headers.get("Location") or resp.headers.get("location")
+if not upload_uri:
+    raise TransientPublishError("YouTube did not return an upload Location header.")
+return upload_uri
+
+
+def _upload_video_bytes(upload_uri: str, file_path: Path, mime_type: str) -> str:
+    """Stream the local video file to the resumable session URI; return video ID."""
+file_size = file_path.stat().st_size
+headers = {
+    "Content-Length": str(file_size),
+    "Content-Type": mime_type or "video/mp4",
+}
+try:
+    with file_path.open("rb") as fh:
+        resp = httpx.put(
+            upload_uri,
+            headers=headers,
+            content=fh,
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+except httpx.HTTPError as exc:
+    raise TransientPublishError(f"Network error uploading video bytes: {exc}") from exc
+
+if resp.status_code >= 500 or resp.status_code == 429:
+    raise TransientPublishError(f"YouTube temporary error during upload ({resp.status_code}).")
+if resp.status_code >= 400:
+    raise PermanentPublishError(
+        f"YouTube rejected video file ({resp.status_code}): {resp.text[:200]}"
+    )
+try:
+    body = resp.json()
+except ValueError as exc:
+    raise TransientPublishError("Invalid JSON response from YouTube upload.") from exc
+
+yt_id = body.get("id")
+if not yt_id:
+    raise TransientPublishError("YouTube response did not contain a video id.")
+return yt_id
+
+
+def _upload_thumbnail(
+access_token: str, youtube_video_id: str, thumb_path: Path, mime_type: str
+) -> None:
+    """Best-effort custom thumbnail upload after the video is created."""
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Content-Type": mime_type or "image/jpeg",
+}
+params = {"videoId": youtube_video_id, "uploadType": "media"}
+try:
+    resp = httpx.post(
+        YOUTUBE_THUMBNAIL_URL,
+        params=params,
+        headers=headers,
+        content=thumb_path.read_bytes(),
+        timeout=60,
+    )
+    if resp.status_code >= 500 or resp.status_code == 429:
+        raise TransientPublishError(f"Thumbnail upload temporary error ({resp.status_code}).")
+except httpx.HTTPError as exc:
+    raise TransientPublishError(f"Network error uploading thumbnail: {exc}") from exc
+
+
+def publish_to_youtube(video: Video, account: YouTubeAccount, storage) -> str:
+    """Download video (and optional thumbnail) from storage and publish to YouTube."""
+try:
+    access_token = access_token_for(account)
+except YouTubeError as exc:
+    if exc.code == "invalid_grant":
+        raise PermanentPublishError(
+            "YouTube access expired or was revoked. Please reconnect your channel."
+        ) from exc
+    raise TransientPublishError(str(exc)) from exc
+except ValueError as exc:
+    raise PermanentPublishError(str(exc)) from exc
+
+suffix = Path(video.storage_key).suffix or ".mp4"
+mime_type = content_type_for_key(video.storage_key) or "video/mp4"
+
+with tempfile.TemporaryDirectory(prefix="yt-pub-") as tmpdir:
+    tmp = Path(tmpdir)
+    local_video = tmp / f"video{suffix}"
+    try:
+        storage.download_to_path(video.storage_key, local_video)
+    except FileNotFoundError as exc:
+        raise PermanentPublishError("Video file is missing from storage.") from exc
+
+    file_size = local_video.stat().st_size
+    upload_uri = _initiate_resumable_upload(access_token, video, file_size, mime_type)
+    yt_video_id = _upload_video_bytes(upload_uri, local_video, mime_type)
+
+    if video.thumbnail_key:
+        thumb_suffix = Path(video.thumbnail_key).suffix or ".jpg"
+        thumb_mime = content_type_for_key(video.thumbnail_key) or "image/jpeg"
+        local_thumb = tmp / f"thumb{thumb_suffix}"
+        try:
+            storage.download_to_path(video.thumbnail_key, local_thumb)
+            _upload_thumbnail(access_token, yt_video_id, local_thumb, thumb_mime)
+        except FileNotFoundError:
+            pass
+
+return yt_video_id
+
+
+def recover_stale_jobs(db: Session, now: datetime | None = None) -> int:
+    """Reset rows stuck in 'processing' for > 30 min back to 'scheduled'."""
+now = now or utcnow()
+cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
+result = db.execute(
+    update(Schedule)
+    .where(Schedule.status == STATUS_PROCESSING, Schedule.scheduled_at_utc <= cutoff)
+    .values(status=STATUS_SCHEDULED, error_message="Recovered stale processing job.")
+)
+db.commit()
+return result.rowcount or 0
+
+
+def recover_stale(db: Session, now: datetime | None = None) -> int:
+    """Compatibility alias for recovering stale processing schedules."""
+return recover_stale_jobs(db, now=now)
+
+
+def claim_due_schedule_ids(db: Session, limit: int = 10, now: datetime | None = None) -> list[int]:
+    """Atomically transition due 'scheduled' rows to 'processing' and return their IDs."""
+now = now or utcnow()
+due_ids = list(
+    db.scalars(
+        select(Schedule.id)
+        .where(
+            Schedule.status == STATUS_SCHEDULED,
+            Schedule.scheduled_at_utc <= now,
+            or_(Schedule.next_retry_at.is_(None), Schedule.next_retry_at <= now),
+        )
+        .order_by(Schedule.scheduled_at_utc, Schedule.id)
+        .limit(limit)
+    ).all()
+)
+
+claimed: list[int] = []
+for sid in due_ids:
+    res = db.execute(
+        update(Schedule)
+        .where(Schedule.id == sid, Schedule.status == STATUS_SCHEDULED)
+        .values(
+            status=STATUS_PROCESSING,
+            attempts=Schedule.attempts + 1,
+        )
+    )
+    if res.rowcount == 1:
+        claimed.append(sid)
+db.commit()
+return claimed
+
+
+def claim_next(db: Session, now: datetime | None = None) -> Schedule | None:
+    """Atomically claim and return the next due Schedule row, or None."""
+claimed_ids = claim_due_schedule_ids(db, limit=1, now=now)
+if not claimed_ids:
+    return None
+return db.get(Schedule, claimed_ids[0])
+
+
+def process_one_schedule(db: Session, schedule_id: int, storage=None) -> str:
+    """Publish a single already-claimed schedule row. Returns final status."""
+storage = storage or get_storage()
+schedule = db.get(Schedule, schedule_id)
+if schedule is None:
+    return "missing"
+
+video = db.get(Video, schedule.video_id)
+account = db.get(YouTubeAccount, schedule.youtube_account_id)
+if video is None or account is None:
+    schedule.status = STATUS_FAILED
+    schedule.error_message = "Associated video or YouTube channel no longer exists."
+    db.commit()
+    return STATUS_FAILED
+
+try:
+    yt_id = publish_to_youtube(video, account, storage)
+except PermanentPublishError as exc:
+    schedule.status = STATUS_FAILED
+    schedule.error_message = str(exc)[:500]
+    schedule.next_retry_at = None
+    db.commit()
+    return STATUS_FAILED
+except TransientPublishError as exc:
+    if schedule.attempts >= MAX_ATTEMPTS:
+        schedule.status = STATUS_FAILED
+        schedule.error_message = f"Failed after {schedule.attempts} attempts: {exc}"[:500]
+        schedule.next_retry_at = None
+        db.commit()
+        return STATUS_FAILED
+    delay_idx = min(schedule.attempts - 1, len(RETRY_BACKOFF_MINUTES) - 1)
+    backoff = timedelta(minutes=RETRY_BACKOFF_MINUTES[delay_idx])
+    schedule.status = STATUS_SCHEDULED
+    schedule.next_retry_at = utcnow() + backoff
+    schedule.error_message = f"Attempt {schedule.attempts} failed, retrying: {exc}"[:500]
+    db.commit()
+    return STATUS_SCHEDULED
+
+schedule.status = STATUS_PUBLISHED
+schedule.youtube_video_id = yt_id
+schedule.youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
+schedule.published_at = utcnow()
+schedule.error_message = None
+schedule.next_retry_at = None
+db.commit()
+return STATUS_PUBLISHED
+
+
+def run_due_jobs(
+db: Session | None = None,
+limit: int | None = 10,
+storage=None,
+) -> RunSummary:
+    """Claim and process due schedules. Safe to call repeatedly."""
+own_session = db is None
+if own_session:
+    db = SessionLocal()
+try:
+    recovered = recover_stale_jobs(db)
+    batch_limit = 1000 if limit is None else max(limit, 0)
+    claimed_ids = claim_due_schedule_ids(db, limit=batch_limit) if batch_limit > 0 else []
+    summary = RunSummary(claimed=len(claimed_ids), recovered=recovered)
+    for sid in claimed_ids:
+        outcome = process_one_schedule(db, sid, storage=storage)
+        summary.processed += 1
+        if outcome == STATUS_PUBLISHED:
+            summary.published += 1
+        elif outcome == STATUS_SCHEDULED:
+            summary.retried += 1
+        elif outcome == STATUS_FAILED:
+            summary.failed += 1
+    return summary
+finally:
+    if own_session:
+        db.close()
+
+
+def run_once(
+max_jobs: int | None = None,
+db: Session | None = None,
+storage=None,
+) -> RunSummary:
+    """Run a single worker pass up to max_jobs."""
+return run_due_jobs(db=db, limit=max_jobs, storage=storage)
+
+
+def fetch_video_statistics(access_token: str, youtube_video_ids: list[str]) -> dict[str, dict]:
+    """Call YouTube Data API v3 `videos.list(part=statistics)` for up to 50 IDs."""
+if not youtube_video_ids:
+    return {}
+try:
+    resp = httpx.get(
+        YOUTUBE_VIDEOS_URL,
+        params={"part": "statistics", "id": ",".join(youtube_video_ids[:50])},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=20,
+    )
+except httpx.HTTPError as exc:
+    raise YouTubeError(f"Could not reach YouTube statistics API: {exc}") from exc
+
+if resp.status_code >= 400:
+    raise YouTubeError(f"YouTube statistics API returned {resp.status_code}.")
+
+out: dict[str, dict] = {}
+for item in resp.json().get("items") or []:
+    vid = item.get("id")
+    st = item.get("statistics") or {}
+    if vid:
+        out[vid] = {
+            "views": int(st.get("viewCount", 0) or 0),
+            "likes": int(st.get("likeCount", 0) or 0),
+            "comments": int(st.get("commentCount", 0) or 0),
+        }
+return out
+
+
+def sync_published_stats(db: Session, user_id: int | None = None) -> int:
+    """Fetch latest YouTube views/likes/comments for published schedules and record VideoStat rows."""
+query = select(Schedule).where(
+    Schedule.status == STATUS_PUBLISHED,
+    Schedule.youtube_video_id.is_not(None),
+)
+if user_id is not None:
+    query = query.where(Schedule.user_id == user_id)
+published = list(db.scalars(query).all())
+if not published:
+    return 0
+
+by_account: dict[int, list[Schedule]] = {}
+for sch in published:
+    by_account.setdefault(sch.youtube_account_id, []).append(sch)
+
+recorded = 0
+now = utcnow()
+for account_id, items in by_account.items():
+    account = db.get(YouTubeAccount, account_id)
+    if account is None:
+        continue
+    try:
+        token = access_token_for(account)
+    except (YouTubeError, ValueError):
+        continue
+
+    for i in range(0, len(items), 50):
+        batch = items[i : i + 50]
+        yt_ids = [s.youtube_video_id for s in batch if s.youtube_video_id]
+        try:
+            stats_map = fetch_video_statistics(token, yt_ids)
+        except YouTubeError:
+            continue
+        for sch in batch:
+            metrics = stats_map.get(sch.youtube_video_id or "")
+            if metrics is not None:
+                db.add(
+                    VideoStat(
+                        schedule_id=sch.id,
+                        captured_at=now,
+                        views=metrics["views"],
+                        likes=metrics["likes"],
+                        comments=metrics["comments"],
+                    )
+                )
+                recorded += 1
+db.commit()
+return recorded
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint for running the worker."""
+parser = argparse.ArgumentParser(description="Background publisher worker")
+parser.add_argument("--once", action="store_true", help="Run a single batch and exit")
+parser.add_argument("--max-jobs", type=int, default=None, help="Maximum jobs per pass")
+args = parser.parse_args(argv)
+
+summary = run_once(max_jobs=args.max_jobs)
+print(f"Worker finished: {summary}")
+return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

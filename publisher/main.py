@@ -9,14 +9,26 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from publisher import auth, products, uploads, videos, youtube
+from publisher import (
+    auth,
+    cron,
+    dashboard,
+    insights,
+    products,
+    schedules,
+    uploads,
+    videos,
+    youtube,
+)
+from publisher.auth import get_current_user
 from publisher.config import get_settings
 from publisher.db import init_db
+from publisher.models import User
 from publisher.templating import PACKAGE_DIR, templates
 
 SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60  # stay logged in for 14 days
@@ -49,10 +61,14 @@ app.mount(
     name="static",
 )
 app.include_router(auth.router)
+app.include_router(dashboard.router)
+app.include_router(insights.router)
 app.include_router(products.router)
 app.include_router(uploads.router)
 app.include_router(videos.router)
+app.include_router(schedules.router)
 app.include_router(youtube.router)
+app.include_router(cron.router)
 
 
 @app.get("/health")
@@ -62,8 +78,10 @@ def health() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    """Home page. `request` is required so templates can build URLs later."""
+def index(request: Request, user: User | None = Depends(get_current_user)):
+    """Home page: signed-in users go straight to the Dashboard."""
+    if user is not None:
+        return RedirectResponse("/dashboard", status_code=303)
     return templates.TemplateResponse(
         request=request,
         name="index.html",

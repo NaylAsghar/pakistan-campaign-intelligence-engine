@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Product Video Scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Automation Dashboard</h1>
+  <span>
+    <a class="button" href="/schedules/new">+ Schedule a video</a>
+    <form method="post" action="/dashboard/sync-stats" class="inline-form">
+      <button type="submit">Sync YouTube Stats</button>
+    </form>
+  </span>
+</div>
+
+{% if message %}
+  <p class="{{ 'form-error' if message.kind == 'error' else 'form-ok' }}" role="alert">{{ message.text }}</p>
+{% endif %}
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-num">{{ counts.scheduled }}</div>
+    <div class="kpi-label">Scheduled</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">{{ counts.processing }}</div>
+    <div class="kpi-label">Processing</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">{{ counts.published }}</div>
+    <div class="kpi-label">Published</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">{{ counts.failed }}</div>
+    <div class="kpi-label">Failed</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">{{ total_views }}</div>
+    <div class="kpi-label">Tracked Views</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">{{ total_likes }}</div>
+    <div class="kpi-label">Tracked Likes</div>
+  </div>
+</div>
+
+<p class="muted">
+  Catalog: <strong>{{ product_count }}</strong> product(s) &middot;
+  <strong>{{ video_count }}</strong> video(s) &middot;
+  <strong>{{ channel_count }}</strong> connected YouTube channel(s).
+  <a href="/insights">View Project 3 Audience Recommendations &rarr;</a>
+</p>
+
+{% if failed %}
+<h2>Failed Uploads (Action Required)</h2>
+<table class="schedule-table">
+  <thead>
+    <tr><th>Scheduled (PKT)</th><th>Video</th><th>Channel</th><th>Attempts</th><th>Error</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for s in failed %}
+    <tr>
+      <td>{{ s.scheduled_at_utc | local_dt }}</td>
+      <td><a href="/videos/{{ s.video_id }}">{{ s.video.title or "(untitled)" }}</a></td>
+      <td>{{ s.youtube_account.channel_title or s.youtube_account.channel_id }}</td>
+      <td>{{ s.attempts }}</td>
+      <td class="muted">{{ s.error_message or "Unknown error" }}</td>
+      <td class="actions">
+        <form method="post" action="/schedules/{{ s.id }}/retry" class="inline-form">
+          <button type="submit" class="small">Retry now</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Upcoming Queue</h2>
+{% if upcoming %}
+<table class="schedule-table">
+  <thead>
+    <tr><th>Publish At (PKT)</th><th>Video</th><th>Channel</th><th>Variant</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for s in upcoming %}
+    <tr>
+      <td>{{ s.scheduled_at_utc | local_dt }}</td>
+      <td><a href="/videos/{{ s.video_id }}">{{ s.video.title or "(untitled)" }}</a></td>
+      <td>{{ s.youtube_account.channel_title or s.youtube_account.channel_id }}</td>
+      <td>{{ s.variant_label or "—" }}</td>
+      <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
+      <td class="actions">
+        {% if s.status == "scheduled" %}
+        <a class="button small" href="/schedules/{{ s.id }}/edit">Edit</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No upcoming videos in the queue. <a href="/schedules/new">Schedule one now.</a></p>
+{% endif %}
+
+<h2>Published Videos &amp; YouTube Performance (Feedback Loop)</h2>
+{% if published %}
+<table class="schedule-table">
+  <thead>
+    <tr><th>Published (PKT)</th><th>Video</th><th>Variant</th><th>Views</th><th>Likes</th><th>Comments</th><th>YouTube</th></tr>
+  </thead>
+  <tbody>
+    {% for s in published %}
+    {% set st = stats_by_schedule.get(s.id) %}
+    <tr>
+      <td>{{ (s.published_at or s.scheduled_at_utc) | local_dt }}</td>
+      <td><a href="/videos/{{ s.video_id }}">{{ s.video.title or "(untitled)" }}</a></td>
+      <td>{{ s.variant_label or "—" }}</td>
+      <td>{{ st.views if st else "—" }}</td>
+      <td>{{ st.likes if st else "—" }}</td>
+      <td>{{ st.comments if st else "—" }}</td>
+      <td>
+        {% if s.youtube_url %}
+        <a href="{{ s.youtube_url }}" target="_blank" rel="noopener">Watch &nearr;</a>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No published videos yet. Once the worker publishes a scheduled video, its YouTube link and engagement stats appear here.</p>
+{% endif %}
+
+{% if ab_summary %}
+<h2>A/B Variant Comparison</h2>
+<table class="schedule-table">
+  <thead>
+    <tr><th>Variant Label</th><th>Posts</th><th>Total Views</th><th>Total Likes</th><th>Total Comments</th><th>Like Rate</th></tr>
+  </thead>
+  <tbody>
+    {% for label, data in ab_summary.items() %}
+    <tr>
+      <td><strong>{{ label }}</strong></td>
+      <td>{{ data.posts }}</td>
+      <td>{{ data.views }}</td>
+      <td>{{ data.likes }}</td>
+      <td>{{ data.comments }}</td>
+      <td>{{ data.like_rate_pct }}%</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

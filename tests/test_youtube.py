@@ -124,10 +124,10 @@ def connect_channel(client):
     params = start_connect(client)
     r = finish_connect(client, params)
     assert r.status_code == 303 and r.headers["location"] == "/youtube"
+    # The channel that was just connected is the newest row. (Picking the
+    # newest USER was wrong whenever a second test user existed.)
     with SessionLocal() as db:
-        return db.scalar(
-            select(YouTubeAccount).order_by(YouTubeAccount.id.desc())
-        ).id
+        return db.scalar(select(YouTubeAccount.id).order_by(YouTubeAccount.id.desc()))
 
 
 # ------------------------------------------------------------ crypto

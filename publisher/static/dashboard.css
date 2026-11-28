@@ -1,0 +1,35 @@
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+.kpi-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: #fafafa;
+}
+.kpi-num {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.kpi-label {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.2rem;
+}
+.insight-box {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0 1.5rem;
+  max-width: 48rem;
+}
+.insight-box textarea {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: inherit;
+}

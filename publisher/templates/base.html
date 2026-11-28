@@ -9,13 +9,18 @@
   <link rel="stylesheet" href="/static/products.css">
   <link rel="stylesheet" href="/static/youtube.css">
   <link rel="stylesheet" href="/static/videos.css">
+  <link rel="stylesheet" href="/static/schedules.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
   <nav>
     <a href="/">Product Video Scheduler</a>
     {% if request.session.get("user_id") %}
+      <a href="/dashboard">Dashboard</a>
       <a href="/products">Products</a>
       <a href="/videos">Videos</a>
+      <a href="/schedules">Schedule</a>
+      <a href="/insights">P3 Insights</a>
       <a href="/youtube">YouTube</a>
       <span class="nav-user">{{ request.session.get("email") }}</span>
       <form method="post" action="/logout" class="nav-form">

@@ -1,4 +1,4 @@
-﻿"""Phase 3 tests: product CRUD, image upload flow, ownership, storage."""
+"""Phase 3 tests: product CRUD, image upload flow, ownership, storage."""
 
 import uuid
 
@@ -164,8 +164,8 @@ def test_other_users_cannot_touch_my_product(client, other_client):
     assert other_client.get(f"/products/{pid}/edit").status_code == 404
     assert other_client.post(f"/products/{pid}/edit", data={"name": "hack"}).status_code == 404
     assert other_client.post(f"/products/{pid}/delete").status_code == 404
-    other_list = other_client.get("/products").text
-    assert "Lawn suit" not in other_list and "no products yet" in other_list
+    # Look for the product's link, not the bare digit: "1" is in the page's own HTML.
+    assert f"/products/{pid}" not in other_client.get("/products").text
     r = other_client.post(
         f"/products/{pid}/images/presign",
         json={"content_type": "image/png", "size": 5, "angle_label": "front"},

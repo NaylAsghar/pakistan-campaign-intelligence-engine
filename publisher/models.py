@@ -179,6 +179,13 @@ class Schedule(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     published_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     variant_label: Mapped[str | None] = mapped_column(String(50))  # A/B tests
+    # Phase 7 (publisher worker). The resumable-upload address YouTube gave us,
+    # so a crashed or interrupted upload continues instead of starting over.
+    # Treat it like a secret: never show it in a page or a log line.
+    upload_session_url: Mapped[str | None] = mapped_column(Text)
+    # When the worker claimed this row; refreshed after every uploaded chunk.
+    # A 'processing' row whose claimed_at is old means the worker died.
+    claimed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="schedules")

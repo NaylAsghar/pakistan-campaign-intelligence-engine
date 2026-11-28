@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Scheduled posts - Product Video Scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Scheduled posts</h1>
+  <a class="button" href="/schedules/new">+ Schedule a video</a>
+</div>
+
+{% if message %}
+  <p class="{{ 'form-error' if message.kind == 'error' else 'form-ok' }}" role="alert">{{ message.text }}</p>
+{% endif %}
+
+<p class="tabs">
+  <a href="/schedules" class="{{ 'active' if not chosen }}">All ({{ total }})</a>
+  {% for s in statuses %}
+  <a href="/schedules?status={{ s }}" class="{{ 'active' if chosen == s }}">{{ s | capitalize }} ({{ counts.get(s, 0) }})</a>
+  {% endfor %}
+</p>
+
+{% if schedules %}
+<table class="schedule-table">
+  <thead>
+    <tr><th>When</th><th>Video</th><th>Channel</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for s in schedules %}
+    <tr>
+      <td>{{ s.scheduled_at_utc | local_dt }}</td>
+      <td><a href="/videos/{{ s.video_id }}">{{ s.video.title or "(untitled)" }}</a></td>
+      <td>{{ s.youtube_account.channel_title or s.youtube_account.channel_id }}</td>
+      <td>
+        <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+        {% if s.status == "scheduled" and s.next_retry_at %}<br><span class="muted">Next try: {{ s.next_retry_at | local_dt }}</span>{% endif %}
+        {% if s.published_at %}<br><span class="muted">Published {{ s.published_at | local_dt }}</span>{% endif %}
+        {% if s.youtube_url %}<br><a href="{{ s.youtube_url }}" target="_blank" rel="noopener">Watch on YouTube</a>{% endif %}
+        {% if s.error_message %}<br><span class="muted">{{ s.error_message }}</span>{% endif %}
+      </td>
+      <td class="actions">
+        {% if s.status == "scheduled" %}
+        <a class="button small" href="/schedules/{{ s.id }}/edit">Edit</a>
+        {% endif %}
+        {% if s.status != "processing" %}
+        <form method="post" action="/schedules/{{ s.id }}/delete" class="inline-form"
+              onsubmit="return confirm('Delete this scheduled post?');">
+          <button type="submit" class="danger small">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% elif total %}
+<p class="muted">No posts with this status.</p>
+{% else %}
+<p>Nothing is scheduled yet. <a href="/schedules/new">Schedule your first video.</a></p>
+{% endif %}
+<p class="muted">All times are shown in Asia/Karachi (PKT).</p>
+{% endblock %}

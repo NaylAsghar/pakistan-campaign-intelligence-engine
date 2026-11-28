@@ -1,8 +1,8 @@
 """Phase 2 tests: password hashing, register, login, logout, protected pages."""
-
 import uuid
 
 import pytest
+
 from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -163,5 +163,6 @@ def test_logout_requires_post(client):
 def test_nav_reflects_login_state(client, email):
     assert "Log in" in client.get("/").text
     register(client, email)
-    page = client.get("/").text
+    page = client.get("/", follow_redirects=True).text   
     assert email in page and "Log out" in page
+    
