@@ -1,129 +1,232 @@
-# Pakistan Social Audience and Campaign Intelligence Engine
+[README (1).md](https://github.com/user-attachments/files/35552579/README.1.md)
+# Pakistan Campaign Intelligence Engine + Product Video Scheduler
 
-Clustering-based analysis of YouTube posts and comments of Pakistani women's lawn brands.
-Big Data Analytics, Project 3 — Nayl Asghar (F2024376143)
+Big Data Analytics course project by **Nayl Asghar** (F2024376143). The repository holds two connected projects:
 
-**Live app:** https://pakistan-campaign-intelligence-enginegit-6sgfeservyb8cbumsyffm.streamlit.app/
-**Repository:** https://github.com/NaylAsghar/pakistan-campaign-intelligence-engine
+| Project | What it is | Where |
+|---|---|---|
+| **Project 4** (this README) | **Automated Product Video Scheduling and YouTube Publishing Platform**: upload product videos, pick a date and time, and they are published to YouTube automatically | `publisher/` |
+| **Project 3** | **Pakistan Social Audience and Campaign Intelligence Engine**: clustering and anomaly detection on 1,959 YouTube posts and 3,873 comments of five Pakistani lawn brands | `app/`, `data/` |
 
-## What this project does
+Project 4 continues Project 3: the Project 3 findings feed the insights pages, and the platform reads real YouTube statistics back after publishing.
 
-A small Streamlit web application that helps a Pakistani lawn brand understand its social audience. It groups similar audience behaviour with clustering, flags unusual posts with anomaly detection, and turns the findings into evidence-based marketing recommendations.
-
-It answers five marketing questions:
-
-1. **Which content attracts attention?** Campaigns, content types and brands compared by views, likes and comments.
-2. **What does the audience want?** Comments grouped by topic: price, fabric quality, sizing, delivery, discounts, availability, purchase interest.
-3. **Which marketing patterns are unusual?** Posts that differ strongly from their own brand's usual level (Isolation Forest).
-4. **Which audience needs should the brand address?** Audience and shopping-need segments (TF-IDF + SVD + K-Means).
-5. **What should the marketing team do next?** Recommendations for content, promotions, customer service and campaign testing.
-
-## Data
-
-| | |
+| Link | Address |
 |---|---|
-| Source | YouTube Data API v3 (public videos and comments of official brand channels) |
-| Brands | Sapphire, Khaadi, Gul Ahmed, Alkaram, Sana Safinaz Official |
-| Product category | Women's lawn suits and seasonal women's wear |
-| Size | 1,959 posts (Table A) and 3,873 real comments (Table B) |
-| Collection date | 2026-11-13 |
-| Real vs simulated | All records are real. No simulated or generated records (see the `data_origin` column). |
+| Project 3 live app | https://pakistan-campaign-intelligence-enginegit-6sgfeservyb8cbumsyffm.streamlit.app/ |
 
-**Why YouTube?** Instagram, TikTok and Facebook only return comments for accounts you manage, and scraping would break their terms. YouTube's official API permits reading public videos and comments. Shares are not available from YouTube, so the `shares` column is empty.
+---
 
-**Privacy.** Usernames are replaced by a one-way hash, and emails, phone numbers and @handles are masked in comment text. No attempt is made to identify individuals. The data is shared for coursework assessment only.
+## What Project 4 does
 
-### Table A — `data/processed/posts.csv`
+1. **Accounts** - register, log in, log out. Every record belongs to one user and is invisible to others.
+2. **Products** - name, description and up to 10 images per product from different angles (each with an angle label).
+3. **YouTube connection** - connect a channel through Google's official OAuth 2.0 screen. The refresh token is stored encrypted.
+4. **Videos** - upload finished videos (made with any external tool) straight to Cloudflare R2, preview them, edit title, description, tags, privacy and thumbnail.
+5. **Scheduling** - choose a date and time in Pakistan time (Asia/Karachi); it is stored as UTC. Edit or delete a post while it is still scheduled.
+6. **Automatic publishing** - a background worker uploads the video to YouTube at the chosen time with its title, description, tags, thumbnail and visibility, then saves the YouTube link and status.
+7. **Dashboard** - counts of scheduled, processing, published and failed posts, the schedule list, published links, and a retry for failed posts.
+8. **Insights and statistics** - suggestions based on Project 3 (posting time, title and description helper, A/B variants) and a loop that reads views, likes and comments of published videos back from YouTube.
 
-`post_id, brand, platform, campaign, content_type, product_category, likes, comments_count, shares, views, days_since_post` plus provenance columns (`source_url`, `collection_date`, `data_origin`, `video_id`, `video_title`, `published_at`, `duration_sec`, ...).
-
-### Table B — `data/processed/comments.csv`
-
-`post_id, comment_text, language_type, topic, sentiment, purchase_intent` plus `author_hash`, `is_spam`, `like_count`, `topics_all` and one True/False column per topic.
-
-Labels (topic, language, intent) come from keyword dictionaries in English, Roman Urdu and Urdu; sentiment uses VADER plus an Urdu/Roman Urdu word list. They were not validated against a large hand-labelled sample, so treat them as indicative.
-
-## Method in brief
-
-| Step | Method |
-|---|---|
-| Collect | YouTube Data API v3 (channel uploads, video statistics, top-level comments, max 300 per post) |
-| Filter and label posts | Keyword rules on titles; video duration for Shorts |
-| Label comments | Keyword dictionaries; VADER |
-| Audience segments | TF-IDF, SVD, K-Means (k chosen by silhouette score) |
-| Post groups | K-Means on views per day, like rate and comment measures |
-| Unusual posts | Isolation Forest on z-scores within each brand |
-| Significance tests | Mann-Whitney and Kruskal-Wallis |
-| Recommendations | Rules that turn counts and tests into actions |
-
-Engagement is measured per view: like rate = likes per 100 views, comment rate = comments per 1,000 views, views per day = views / days since posting.
-
-## Key findings
-
-- Song and music is the largest comment topic (34.3%); only about 8% of comments express shopping needs.
-- "Spring Lawn" posts have the highest median like rate; differences between campaigns are significant (Kruskal-Wallis p < 0.0001). Short versus longer video is not significant (p = 0.1076).
-- 98 posts (5.0%) are flagged as unusual and listed for investigation.
-- Only 32.6% of posts have any comments, so conversation is concentrated on a few posts.
-- 10 recommendations, for example: show the price and availability in descriptions, credit the song and singer, and answer delivery comments quickly.
-
-## Repository structure
+### How a post is published
 
 ```
-app/                 Streamlit web application (app.py)
-src/                 Collection, labelling and analysis scripts
-data/raw/            Raw collected data
-data/processed/      posts.csv, comments.csv, cluster outputs
-reports/             Summary CSV files and the generated Word report
-images/              Charts
-requirements.txt     Python dependencies
-.env.example         Template for the API key file
+scheduled --claim--> processing --ok--------------------------> published
+                         |
+                         +-- temporary error, tries left ---> scheduled (waits, tries again)
+                         +-- permanent error / 5th failure --> failed
 ```
 
-## Run the app locally
+- **Atomic claim:** one `UPDATE ... WHERE status='scheduled'` decides which worker gets a post, so a post is never published twice.
+- **Resumable upload:** the file goes to YouTube in 8 MB chunks; the session address is saved, so an interrupted upload continues from the last byte instead of starting over.
+- **Retries:** waits of 2, 10, 30 and 120 minutes; a used-up daily YouTube quota waits 3 hours; the 5th failure ends as `failed` with a readable message. Permanent problems (video rejected, access revoked, file missing) fail at once.
+- **Thumbnail trouble never fails a post:** the video is already live, so the post is `published` with a note.
+- **Abandoned posts** stuck in `processing` for 15 minutes go back to `scheduled`.
 
-```bash
+More detail: [`docs/WORKER.md`](docs/WORKER.md).
+
+---
+
+## Technology
+
+| Part | Technology |
+|---|---|
+| Web app | Python, FastAPI, Jinja2 |
+| Database | SQLAlchemy - SQLite for development, a hosted database in production (`DATABASE_URL`) |
+| File storage | Cloudflare R2 (S3-compatible) via boto3; local folder for development and tests |
+| Passwords and sessions | bcrypt, signed cookie sessions (14 days, SameSite=Lax) |
+| YouTube | Google OAuth 2.0 (PKCE) and YouTube Data API v3 via httpx |
+| Token protection | Fernet encryption |
+| Tests | pytest (192 tests, no internet needed) |
+
+---
+
+## Project structure
+
+```
+publisher/                Project 4 application
+  main.py                 app, session middleware, routers, health route
+  config.py               all settings, read from the environment
+  models.py, db.py        tables; db.py also adds new columns to older databases
+  auth.py, security.py    register/login/logout, bcrypt
+  products.py             products and multi-angle images
+  videos.py, uploads.py   video and thumbnail upload, preview, edit, delete
+  storage.py              R2 and local storage, presigned URLs, file checks
+  youtube.py              connect/disconnect pages (OAuth callback)
+  google_oauth.py         OAuth flow, token refresh
+  crypto.py               Fernet encryption of refresh tokens
+  schedules.py, timeutil.py   scheduling pages, Karachi <-> UTC conversion
+  youtube_api.py          resumable upload, thumbnail, error classification
+  worker.py               claim, publish, retry, recover, command line
+  cron.py                 /cron/publish for cron services
+  dashboard.py, insights.py   dashboard and Project 3 insights
+  templates/, static/     pages, CSS, upload JavaScript
+tests/                    automated tests
+docs/                     PHASES.md, R2_SETUP.md, WORKER.md
+app/, data/               Project 3 (Streamlit app and data)
+```
+
+---
+
+## Run it on your computer
+
+Requirements: Python 3.11 or newer and Git.
+
+### 1. Get the code and install
+
+```powershell
 git clone https://github.com/NaylAsghar/pakistan-campaign-intelligence-engine.git
 cd pakistan-campaign-intelligence-engine
-pip install -r requirements.txt
-streamlit run app/app.py
+python -m venv venv
+.\venv\Scripts\Activate.ps1          # macOS/Linux: source venv/bin/activate
+pip install -r requirements-publisher.txt
 ```
 
-The processed data is already included, so no API key is needed to run the app.
+### 2. Create your `.env`
 
-App pages: Overview · 1. Content · 2. Audience wants · 3. Unusual patterns · 4. Segments · 5. Recommendations · Data and method.
+Copy `.env.example` to `.env`, then make two secret keys:
 
-## Reproduce the pipeline (optional)
-
-Run every script from the project root. This needs a YouTube Data API key.
-
-1. Copy `.env.example` to `.env` and paste your key: `YOUTUBE_API_KEY=your_key_here`. The `.env` file is git-ignored and must never be committed.
-2. Run the steps in order:
-
-```bash
-python src/find_channels.py "Sapphire Pakistan"   # find a brand's channel ID (brands are set in src/config.py)
-python src/check_channels.py                      # check channels before collecting
-python src/census_channels.py                     # list all videos and comment counts
-python src/build_posts.py                         # build Table A (posts.csv)
-python src/collect_comments.py                    # collect raw comments (resumable if quota runs out)
-python src/label_comments.py                      # build Table B (comments.csv)
-python src/cluster_comments.py                    # audience and shopping-need segments
-python src/cluster_posts.py                       # post groups, unusual posts, engagement tables
-python src/generate_report.py                     # optional: Word report from the data
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"                           # SECRET_KEY
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # FERNET_KEY
+python -c "import secrets; print(secrets.token_urlsafe(32))"                           # CRON_TOKEN
 ```
 
-## Limitations
+| Variable | Meaning | Default |
+|---|---|---|
+| `SECRET_KEY` | signs the session cookie | **required** |
+| `FERNET_KEY` | encrypts YouTube refresh tokens | **required** |
+| `DATABASE_URL` | database address | `sqlite:///./publisher.db` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client | empty |
+| `GOOGLE_REDIRECT_URI` | return address after Google sign-in | `http://localhost:8000/youtube/callback` |
+| `STORAGE_BACKEND` | `local` or `s3` (Cloudflare R2) | `local` |
+| `LOCAL_STORAGE_DIR` | folder for the local backend | `./storage` |
+| `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` | Cloudflare R2 connection | empty |
+| `CRON_TOKEN` | secret for `/cron/publish` (empty = switched off) | empty |
+| `APP_TIMEZONE` | time zone shown to users | `Asia/Karachi` |
+| `SESSION_COOKIE_SECURE` | `true` only behind HTTPS | `false` |
 
-- Only YouTube was used; results may differ on Instagram, TikTok or Facebook, and shares could not be measured.
-- Five brands and mostly Shorts (about 92% of posts); some campaign types have few posts.
-- Most posts have no comments, so comment findings come from a small set of posts.
-- Rule-based labels and VADER are weaker on Roman Urdu and mixed-language comments.
-- Clusters of short text are only weakly separated (silhouette 0.061); segment labels are interpretations.
-- Engagement shows association, not cause; recommendations are starting points for A/B testing.
+**Never commit `.env`.** It is listed in `.gitignore`.
 
-## Future work
+With `STORAGE_BACKEND=local` you need no cloud account to try the app (files go to `./storage`).
 
-Add Instagram and TikTok through approved business access, link posts to product prices from a catalogue, add transaction data, and hand-label a larger sample to measure the accuracy of the comment labels.
+### 3. Google OAuth (needed only to connect YouTube)
 
-## Data and platform terms
+1. In [Google Cloud Console](https://console.cloud.google.com/) create a project and enable **YouTube Data API v3**.
+2. **OAuth consent screen:** choose External, and while it is in *Testing* add your own Google account as a **test user**.
+3. **Credentials -> Create OAuth client ID -> Web application.** Add the authorised redirect URI `http://localhost:8000/youtube/callback` (and later your live address, e.g. `https://YOUR-APP.onrender.com/youtube/callback`).
+4. Put the client id and secret in `.env`. The app asks for two permissions only: upload videos and read channel information.
 
-Data was collected through the official YouTube Data API v3 and is used for coursework analysis under the YouTube API terms. Brand names and content belong to their respective owners.
+### 4. Cloudflare R2 (for real cloud storage)
+
+Follow [`docs/R2_SETUP.md`](docs/R2_SETUP.md): create a bucket, create an API token, allow browser uploads in the bucket's CORS settings, and fill the `S3_*` variables with `STORAGE_BACKEND=s3`.
+
+### 5. Start the app and the worker
+
+Two terminals, both with the venv active:
+
+```powershell
+uvicorn publisher.main:app --reload          # terminal 1: web app at http://localhost:8000
+python -m publisher.worker                   # terminal 2: publisher worker (Ctrl+C to stop)
+```
+
+`python -m publisher.worker --once` runs a single pass and prints how many posts were published, retried or failed.
+
+### 6. Try it end to end
+
+1. Register, then create a product and add images.
+2. **YouTube** page -> Connect, sign in with the Google test account.
+3. **Videos** -> upload a short mp4, set the privacy to **Private** for testing.
+4. **Schedules** -> new schedule about 6 minutes ahead (the minimum is 5).
+5. Wait with the worker running: the status changes to `processing`, then `published`, with a link to the video.
+
+---
+
+## Tests
+
+```powershell
+pytest -q
+```
+
+192 tests cover accounts, ownership, uploads, YouTube connection, scheduling, the worker and the dashboard. They use a temporary folder and a fake YouTube service that behaves like YouTube's resumable upload protocol (including interrupted and resumed uploads), so they run without the internet.
+
+---
+
+## Deploy (Render example)
+
+1. Use a hosted database (for example Render Postgres) and set `DATABASE_URL`. A SQLite file on free hosting is erased at every redeploy.
+2. Create a **Web Service** from this GitHub repository:
+   - Build command: `pip install -r requirements-publisher.txt`
+   - Start command: `uvicorn publisher.main:app --host 0.0.0.0 --port $PORT`
+3. Add all environment variables from the table above in the service's Environment tab, with `SESSION_COOKIE_SECURE=true`, `STORAGE_BACKEND=s3` and `GOOGLE_REDIRECT_URI=https://YOUR-APP.onrender.com/youtube/callback`. Add the same redirect address in Google Cloud Console.
+4. **Cron ping.** A free host runs only the web app, so use a cron service (for example cron-job.org) to call the worker every 1 to 2 minutes:
+
+   ```
+   POST https://YOUR-APP.onrender.com/cron/publish
+   Header:  X-Cron-Token: <your CRON_TOKEN>
+   ```
+
+   The call returns `202` immediately and the worker pass runs in the background. A wrong token gets `403`; if `CRON_TOKEN` is empty the address is switched off. The ping also wakes a sleeping free service. If the cron service reports a timeout on the first call after sleep, raise its timeout to 60 seconds.
+
+---
+
+## Security
+
+- Passwords are stored only as salted bcrypt hashes; every login failure shows the same message.
+- Session cookies are signed, SameSite=Lax, and Secure on HTTPS.
+- Google sign-in uses PKCE and a checked `state` value; refresh tokens are encrypted with Fernet and never shown or logged.
+- Uploads use one-time links valid for 10 minutes; the server checks the file size and first bytes afterwards.
+- Another user's product, video or schedule answers 404.
+- `/cron/publish` needs a secret token compared in constant time.
+- Secrets live only in environment variables, never in Git.
+
+---
+
+## Known limits
+
+- **Quota:** one upload costs 1,600 of YouTube's 10,000 daily units, so about **6 uploads a day** at the default quota.
+- **Private uploads:** videos uploaded through a Google Cloud project that has not passed Google's API audit are forced to *private* by YouTube, whatever visibility you pick. The app is working correctly when this happens.
+- **Testing mode:** while the Google consent screen is in *Testing*, refresh tokens expire after 7 days; press **Connect** again if publishing says "Reconnect the channel".
+- **Thumbnails** need a phone-verified YouTube channel.
+- **Free hosting** sleeps when idle, so a post can start a minute or two late.
+- Video generation is out of scope: make videos with any external tool and upload them.
+
+## Troubleshooting
+
+| You see | Do this |
+|---|---|
+| Post stays `scheduled` after its time | Is the worker running (or the cron ping set up)? Try `python -m publisher.worker --once` |
+| `Attempt 1 of 5 failed: Could not get YouTube access` | Check `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart |
+| `Reconnect the channel` | Connect the channel again on the YouTube page |
+| `The video file is missing from storage` | Upload the video again and schedule the new one |
+| `daily upload quota is used up` | Wait; the worker retries by itself after 3 hours |
+| Cannot log in on the live site | Set `SESSION_COOKIE_SECURE=true` only on HTTPS, and `false` on `http://localhost` |
+
+---
+
+## Project 3 (summary)
+
+Project 3 collected public data with the YouTube Data API v3 (1,959 posts and 3,873 comments from Sapphire, Khaadi, Gul Ahmed, Alkaram and Sana Safinaz), grouped audience behaviour with K-Means, flagged unusual posts with Isolation Forest and turned the findings into recommendations. See the Project 3 report and the [live Streamlit app](https://pakistan-campaign-intelligence-enginegit-6sgfeservyb8cbumsyffm.streamlit.app/).
+
+## Author
+
+Nayl Asghar - F2024376143 - Big Data Analytics - coursework project, 2026.
