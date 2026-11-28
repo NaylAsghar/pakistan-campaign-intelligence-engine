@@ -4,10 +4,13 @@
 <p><a href="/videos">&larr; All videos</a></p>
 <div class="page-head">
   <h1>{{ video.title }}</h1>
+  <span>
+    <a class="button" href="/schedules/new?video_id={{ video.id }}">Schedule this video</a>
   <form method="post" action="/videos/{{ video.id }}/delete" class="inline-form"
         onsubmit="return confirm('Delete this video and its thumbnail? This cannot be undone.');">
     <button type="submit" class="danger">Delete video</button>
   </form>
+  </span>
 </div>
 
 {% if message %}

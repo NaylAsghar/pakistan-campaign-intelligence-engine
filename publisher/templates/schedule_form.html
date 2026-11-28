@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit scheduled post" if schedule else "Schedule a video" }} - Product Video Scheduler{% endblock %}
+{% block content %}
+<p><a href="/schedules">&larr; All scheduled posts</a></p>
+<h1>{{ "Edit scheduled post" if schedule else "Schedule a video" }}</h1>
+
+{% if error %}<p class="form-error wide" role="alert">{{ error }}</p>{% endif %}
+
+{% if not videos %}
+  <p>You have no videos yet. <a href="/videos/new">Upload a video</a> first.</p>
+{% elif not accounts %}
+  <p>No YouTube channel is connected yet. <a href="/youtube">Connect a channel</a> first.</p>
+{% else %}
+<form method="post" action="{{ '/schedules/%d/edit' % schedule.id if schedule else '/schedules' }}" class="auth-form wide">
+  <label>Video
+    <select name="video_id" required>
+      <option value="">Choose a video...</option>
+      {% for v in videos %}
+      <option value="{{ v.id }}" {{ "selected" if v.id | string == form.video_id | string }}>{{ v.title or "(untitled)" }} ({{ v.privacy_status }})</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>YouTube channel
+    <select name="youtube_account_id" required>
+      <option value="">Choose a channel...</option>
+      {% for a in accounts %}
+      <option value="{{ a.id }}" {{ "selected" if a.id | string == form.youtube_account_id | string }}>{{ a.channel_title or a.channel_id }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Publish at ({{ tz_name }} time)
+    <input type="datetime-local" name="scheduled_at" value="{{ form.scheduled_at }}"
+           min="{{ min_value }}" max="{{ max_value }}" required>
+  </label>
+  <p class="muted">At least {{ min_lead }} minutes from now. The video's title, description, tags,
+    thumbnail and visibility are the ones saved on the video page when it is published.</p>
+  <button type="submit">{{ "Save changes" if schedule else "Schedule video" }}</button>
+</form>
+{% endif %}
+<p><a href="/schedules">Cancel</a></p>
+{% endblock %}
