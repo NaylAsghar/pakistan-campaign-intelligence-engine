@@ -12,7 +12,7 @@ JSON endpoints used by the upload script (401 when not logged in):
     POST /products/{id}/images/confirm     record the finished upload
 
 Files:
-    PUT  /storage/local-upload             receives files (local backend only)
+    (PUT /storage/local-upload lives in uploads.py)
     GET  /images/{id}                      show one image (owner only)
     POST /products/{id}/images/{image_id}/delete
 
@@ -23,7 +23,7 @@ nobody can find out which ids exist.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -35,7 +35,6 @@ from publisher.storage import (
     IMAGE_TYPES,
     MAX_IMAGE_BYTES,
     get_storage,
-    looks_like_image,
     new_image_key,
     product_id_from_key,
 )
@@ -55,6 +54,7 @@ ANGLE_LABELS = (
 
 
 def _page(request: Request, template: str, status_code: int = 200, **context):
+    # The parameter is `template`, not `name`: a page may pass its own `name` value.
     return templates.TemplateResponse(
         request=request, name=template, context=context, status_code=status_code
     )
@@ -294,35 +294,6 @@ def image_confirm(
     db.add(image)
     db.commit()
     return {"id": image.id, "url": f"/images/{image.id}", "angle_label": angle}
-
-
-@router.put("/storage/local-upload")
-async def local_upload(
-    request: Request, token: str = "", storage=Depends(get_storage)
-):
-    """Receives the file when STORAGE_BACKEND=local (R2 gets it directly)."""
-    if not hasattr(storage, "read_upload_token"):
-        raise HTTPException(404)
-    claims = storage.read_upload_token(token)
-    if claims is None:
-        raise HTTPException(400, "Upload link is invalid or has expired.")
-
-    content_type = request.headers.get("content-type", "").split(";")[0].strip()
-    if content_type != claims["ct"]:
-        raise HTTPException(415, "File type does not match the upload link.")
-
-    chunks, total = [], 0
-    async for chunk in request.stream():
-        total += len(chunk)
-        if total > MAX_IMAGE_BYTES:
-            raise HTTPException(413, "Image is too large.")
-        chunks.append(chunk)
-    data = b"".join(chunks)
-
-    if not looks_like_image(data, content_type):
-        raise HTTPException(400, "The file is not a valid image.")
-    storage.save(claims["key"], data)
-    return Response(status_code=200)
 
 
 # ----------------------------------------------------- show / delete image

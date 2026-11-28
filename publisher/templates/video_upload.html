@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Upload video - Product Video Scheduler{% endblock %}
+{% block content %}
+<p><a href="/videos">&larr; All videos</a></p>
+<h1>Upload a video</h1>
+<p class="muted">
+  Make your video with any outside tool, then upload it here. Allowed: {{ allowed }}, up to {{ max_mb }} MB.
+  Videos are stored privately; only you can watch them.
+</p>
+
+<form id="video-form" class="auth-form wide"
+      data-types='{{ video_types | tojson }}' data-max-mb="{{ max_mb }}" data-max-title="{{ max_title }}">
+  <label>Video file
+    <input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required>
+  </label>
+  <label>Title
+    <input type="text" id="video-title" maxlength="{{ max_title }}" placeholder="Filled in from the file name">
+  </label>
+  <label>Product (optional)
+    <select id="video-product">
+      <option value="">No product</option>
+      {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+    </select>
+  </label>
+
+  <div id="video-progress" class="progress" hidden>
+    <progress id="video-bar" max="100" value="0"></progress>
+    <span id="video-status" class="muted"></span>
+  </div>
+  <p id="video-message" class="form-error" role="alert" hidden></p>
+  <button type="submit" id="video-button" disabled>Upload</button>
+</form>
+
+<script src="/static/uploader.js"></script>
+<script src="/static/video_upload.js"></script>
+{% endblock %}

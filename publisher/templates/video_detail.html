@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }} - Product Video Scheduler{% endblock %}
+{% block content %}
+<p><a href="/videos">&larr; All videos</a></p>
+<div class="page-head">
+  <h1>{{ video.title }}</h1>
+  <form method="post" action="/videos/{{ video.id }}/delete" class="inline-form"
+        onsubmit="return confirm('Delete this video and its thumbnail? This cannot be undone.');">
+    <button type="submit" class="danger">Delete video</button>
+  </form>
+</div>
+
+{% if message %}
+  <p class="{{ 'form-error' if message.kind == 'error' else 'form-ok' }}" role="alert">{{ message.text }}</p>
+{% endif %}
+
+<video class="player" controls preload="metadata"
+       {% if video.thumbnail_key %}poster="/videos/{{ video.id }}/thumbnail?v={{ video.thumbnail_key[-12:] }}"{% endif %}
+       src="/videos/{{ video.id }}/file">
+  Your browser cannot play this video.
+</video>
+<p class="muted">
+  {{ video.original_filename or "video" }} &middot; {{ (video.size_bytes / 1048576) | round(1) }} MB
+  {% if video.product %}&middot; Product: <a href="/products/{{ video.product.id }}">{{ video.product.name }}</a>{% endif %}
+</p>
+
+<h2>Details for YouTube</h2>
+{% if error %}<p class="form-error wide" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="/videos/{{ video.id }}/edit" class="auth-form wide">
+  <label>Title (max {{ max_title }} characters)
+    <input type="text" name="title" value="{{ form.title }}" required maxlength="{{ max_title }}">
+  </label>
+  <label>Description (max {{ max_description }} bytes)
+    <textarea name="description" rows="8">{{ form.description }}</textarea>
+  </label>
+  <label>Tags (separate with commas)
+    <input type="text" name="tags" value="{{ form.tags }}" placeholder="lawn suit, summer 2026, pakistan">
+  </label>
+  <label>Visibility
+    <select name="privacy_status">
+      {% for option in privacy_options %}
+      <option value="{{ option }}" {{ "selected" if form.privacy == option }}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Product
+    <select name="product_id">
+      <option value="">No product</option>
+      {% for p in products %}
+      <option value="{{ p.id }}" {{ "selected" if p.id | string == form.product_id | string }}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Save changes</button>
+</form>
+
+<h2>Thumbnail</h2>
+{% if video.thumbnail_key %}
+  <img class="thumb-preview" id="thumb-preview"
+       src="/videos/{{ video.id }}/thumbnail?v={{ video.thumbnail_key[-12:] }}" alt="Thumbnail">
+  <form method="post" action="/videos/{{ video.id }}/thumbnail/delete" class="inline-form"
+        onsubmit="return confirm('Remove the thumbnail?');">
+    <button type="submit" class="danger small">Remove thumbnail</button>
+  </form>
+{% else %}
+  <p class="muted">No thumbnail yet. YouTube will pick a frame from the video.</p>
+{% endif %}
+
+<form id="thumb-form" class="auth-form wide" data-video-id="{{ video.id }}"
+      data-types='{{ thumb_types | tojson }}' data-max-mb="{{ max_thumb_mb }}">
+  <label>{{ "Replace thumbnail" if video.thumbnail_key else "Upload thumbnail" }}
+    (JPEG or PNG, up to {{ max_thumb_mb }} MB, 1280x720 works best)
+    <input type="file" id="thumb-file" accept="image/jpeg,image/png">
+  </label>
+  <p id="thumb-message" class="form-error" role="alert" hidden></p>
+  <button type="submit" id="thumb-button" disabled>Upload thumbnail</button>
+</form>
+
+<script src="/static/uploader.js"></script>
+<script src="/static/video_thumbnail.js"></script>
+{% endblock %}
