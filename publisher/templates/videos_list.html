@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}My videos - Product Video Scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>My videos</h1>
+  <a class="button" href="/videos/new">+ Upload video</a>
+</div>
+
+{% if message %}
+  <p class="{{ 'form-error' if message.kind == 'error' else 'form-ok' }}" role="alert">{{ message.text }}</p>
+{% endif %}
+
+{% if videos %}
+<ul class="video-grid">
+  {% for v in videos %}
+  <li class="video-card">
+    <a href="/videos/{{ v.id }}">
+      {% if v.thumbnail_key %}
+        <img src="/videos/{{ v.id }}/thumbnail?v={{ v.thumbnail_key[-12:] }}" alt="Thumbnail of {{ v.title }}" loading="lazy">
+      {% else %}
+        <div class="no-image video-placeholder">No thumbnail</div>
+      {% endif %}
+      <strong>{{ v.title }}</strong>
+      <span class="muted">
+        {{ (v.size_bytes / 1048576) | round(1) }} MB
+        &middot; <span class="badge badge-{{ v.privacy_status }}">{{ v.privacy_status }}</span>
+      </span>
+      {% if v.product %}<span class="muted">Product: {{ v.product.name }}</span>{% endif %}
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>You have no videos yet. <a href="/videos/new">Upload your first video.</a></p>
+{% endif %}
+{% endblock %}

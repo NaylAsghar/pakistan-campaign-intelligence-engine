@@ -1,0 +1,14 @@
+.video-grid { list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
+.video-card a { display: grid; gap: 0.25rem; text-decoration: none; color: inherit; }
+.video-card img, .video-placeholder { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: #eee; }
+.video-placeholder { display: grid; place-items: center; color: #666; }
+.badge { display: inline-block; padding: 0 0.4rem; border-radius: 999px; font-size: 0.8rem; background: #eee; color: #333; }
+.badge-public { background: #e8f5ec; color: #1b6e32; }
+.badge-unlisted { background: #fff4d6; color: #7a5a00; }
+.badge-private { background: #eceff3; color: #444; }
+.player { width: 100%; max-width: 48rem; background: #000; border-radius: 4px; }
+.thumb-preview { display: block; width: 100%; max-width: 24rem; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem; background: #eee; }
+.progress { display: grid; gap: 0.25rem; }
+.progress progress { width: 100%; }
+.form-error.wide { max-width: 36rem; }
+.auth-form select { padding: 0.5rem; font: inherit; }
