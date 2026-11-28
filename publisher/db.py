@@ -28,7 +28,7 @@ def _engine():
         # A request may run on a different thread from the one that opened
         # the connection. SQLite rejects that unless this check is off.
         connect_args["check_same_thread"] = False
-    return create_engine(database_url, connect_args=connect_args)
+    return create_engine(database_url, connect_args=connect_args, pool_pre_ping=True)
 
 
 engine = _engine()
